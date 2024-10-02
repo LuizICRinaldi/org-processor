@@ -5,12 +5,11 @@
 
 #define MAX_LENGTH 256
 
-
 typedef struct{
 	char nomeInstrucao[5];
 	int end1, end2, end3, dado1, dado2, dado3;
 	bool Valido;	
-}instrucaoFim;
+} instrucaoFim;
 
 char instrucao[MAX_LENGTH];
 int numInt = 0;
@@ -23,6 +22,7 @@ void reader(){
     if (fp == NULL)
     {
         printf("Error: could not open file %s", filename);
+		return;
      
     }
 
@@ -30,18 +30,14 @@ void reader(){
 
 	while(	fgets(memInstrucoes[numInt], MAX_LENGTH, fp)){
 		numInt++;
-} 	
+	} 	
 	
 	int i;
 	for(i = 0;i<4;i++){
 		printf("%s", memInstrucoes[i]);
 	}
-  
-    
-
     
     fclose(fp);
-	
 }
 
 int main()
@@ -49,8 +45,8 @@ int main()
 	char buffer[MAX_LENGTH];
 	reader();	
 	numInt=0;
-	while(fgets(buffer, MAX_LENGTH, memInstrucoes[numInt])){
-	printf("%s", buffer);
+	while(fgets(buffer, MAX_LENGTH, memInstrucoes[numInt])) {
+		printf("%s", buffer);
 	} 
 	
 	

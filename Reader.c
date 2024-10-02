@@ -1,12 +1,6 @@
-#include <stdio.h>
-#define MAX_LENGTH 256
-#include <string.h>
+#include "reader.h"
 
-char instrucao[MAX_LENGTH];
-int numInt = 0;
-char memInstrucoes[MAX_LENGTH][MAX_LENGTH];
-
-void reader(){
+void reader() {
 	char *filename = "readme.txt";
     FILE *fp = fopen(filename, "r");
 
@@ -17,7 +11,6 @@ void reader(){
     }
 
     // reading line by line, max 256 bytes
-
 	while(	fgets(memInstrucoes[numInt], MAX_LENGTH, fp)){
 		numInt++;
 } 	
@@ -26,16 +19,6 @@ void reader(){
 	for(i = 0;i<4;i++){
 		printf("%s", memInstrucoes[i]);
 	}
-  
-    
-
     
     fclose(fp);
-	
 }
-
-int main()
-{
-reader();
-}
-

@@ -1,7 +1,6 @@
-ola
-mund
-este
-programa
-e 
-um 
-teste
+lw 1 0 10
+lw 2 1 11
+noop
+add 3 1 2
+sub 4 1 2
+halt

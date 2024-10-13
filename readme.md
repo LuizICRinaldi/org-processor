@@ -42,10 +42,15 @@ Faz predição de desvio usando a política "não tomado" (o desvio não ocorre 
 O arquivo de texto que o simulador vai ler deve ter as instruções escritas da seguinte forma:
 
 Instruções de operação: <operação> <destino> <operando1> <operando2>
+
 Exemplo: add 1 2 3 (coloca em R1 a soma de R2 e R3)
+
 Desvios condicionais: beq <registrador1> <registrador2> <label>
+
 Exemplo: beq 2 3 10 (se R2 for igual a R3, pula para a linha 10)
+
 Carregar e armazenar dados: lw (load word) e sw (store word)
+
 Exemplo: lw 1 0 10 (carrega o valor da memória no endereço base R0 + 10 para o R1)
 
 ## Como compilar e rodar

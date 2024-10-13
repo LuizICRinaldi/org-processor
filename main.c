@@ -7,40 +7,44 @@
 #define NUM_REGS 32
 #define MAX_INSTRUCTIONS 100
 
-// Estrutura para representar uma instrução
+// Estrutura que representa uma instrução no pipeline
 typedef struct {
-    char nomeInstrucao[5]; // Nome da instrução
-    int end1, end2, end3;   // Registradores e endereço
-    int dado1, dado2, dado3; // Dados dos registradores
-    bool Valido;            // Indica se a instrução é válida
+    char nomeInstrucao[5]; // Nome da instrução (ex: "add", "sub", "beq", etc.)
+    int end1, end2, end3; // Endereços dos registradores ou offset
+    int dado1, dado2, dado3; // Valores dos registradores
+    bool Valido; // Indica se a instrução é válida
 } instrucaoFim;
 
-// Variáveis globais
-char txtInstrucoes[MAX_INSTRUCTIONS][MAX_LENGTH]; // Instruções lidas do arquivo
-int R[NUM_REGS] = {0}; // Registradores, R0 é fixo em zero
-instrucaoFim instrucoes[MAX_INSTRUCTIONS]; // Array de instruções
-int numInt = 0; // Número de instruções lidas
+// Armazenamento das instruções lidas do arquivo
+char txtInstrucoes[MAX_INSTRUCTIONS][255];
+
+// Banco de registradores (R0 a R31)
+int R[NUM_REGS] = {0};
+instrucaoFim instrucoes[MAX_INSTRUCTIONS]; // Vetor para armazenar instruções
+int numInt = 0; // Contador de instruções
 int pc = 0; // Contador de programa
 int memory[256] = {0}; // Memória de dados
 
 // Função para ler o arquivo com as instruções
 void reader() {
-    char *filename = "programa.txt";
-    FILE *fp = fopen(filename, "r"); // Abre o arquivo para leitura
+    char *filename = "programa.txt"; // Nome do arquivo contendo as instruções
+    FILE *fp = fopen(filename, "r"); // Abre o arquivo
 
     if (fp == NULL) {
-        printf("Error: could not open file %s\n", filename);
+        printf("Error: could not open file %s\n", filename); // Mensagem de erro ao abrir o arquivo
         return;
     }
 
+    // Leitura das instruções do arquivo
     while (fgets(txtInstrucoes[numInt], MAX_LENGTH, fp) && numInt < MAX_INSTRUCTIONS) {
+        // Tratamento de instruções "noop" e "halt"
         if (strncmp(txtInstrucoes[numInt], "noop", 4) == 0 || strncmp(txtInstrucoes[numInt], "halt", 4) == 0) {
             sscanf(txtInstrucoes[numInt], "%s", instrucoes[numInt].nomeInstrucao);
-            instrucoes[numInt].nomeInstrucao[0] = 0; // Marcar instrução como vazia
-            instrucoes[numInt].end1 = 0; // Inicializa os registradores e endereços
+            instrucoes[numInt].nomeInstrucao[0] = 0;
+            instrucoes[numInt].end1 = 0;
             instrucoes[numInt].end2 = 0;
             instrucoes[numInt].end3 = 0;
-            instrucoes[numInt].Valido = true; // Marca a instrução como válida
+            instrucoes[numInt].Valido = true; // Marcar como válida
             numInt++;
         } else {
             sscanf(txtInstrucoes[numInt], "%s %d %d %d",
@@ -48,29 +52,30 @@ void reader() {
                    &instrucoes[numInt].end1,
                    &instrucoes[numInt].end2,
                    &instrucoes[numInt].end3);
-            instrucoes[numInt].Valido = true; // Marca a instrução como válida
+            instrucoes[numInt].Valido = true; // Marcar como válida
             numInt++;
         }
     }
 
-    fclose(fp); // Fecha o arquivo após a leitura
+    fclose(fp); // Fecha o arquivo
 }
 
 // Estágio 1: Busca da instrução
 instrucaoFim fetch(int pc) {
     if (pc < numInt) {
-        return instrucoes[pc]; // Retorna a instrução do contador de programa
+        return instrucoes[pc]; // Retorna a instrução no endereço atual do PC
     }
-    return (instrucaoFim){0}; // Retorna uma instrução vazia
+    return (instrucaoFim){0}; // Retorna instrução vazia se o PC estiver fora do alcance
 }
 
 // Estágio 2: Decodificação da instrução
 void decode(instrucaoFim *instr) {
-    if (instr->nomeInstrucao[0] == 0 || !instr->Valido) return; // Verifica se a instrução é vazia ou inválida
+    if (instr->nomeInstrucao[0] == 0 || !instr->Valido) return; // Verifica se a instrução é válida
 
-    instr->dado1 = R[instr->end1]; // Carrega dados do primeiro registrador
-    instr->dado2 = R[instr->end2]; // Carrega dados do segundo registrador
-    instr->dado3 = instr->end3; // Carrega o endereço
+    // Lê os dados dos registradores
+    instr->dado1 = R[instr->end1];
+    instr->dado2 = R[instr->end2];
+    instr->dado3 = R[instr->end3];
 
     printf("Decodificando: %s, Dado1: %d, Dado2: %d, Dado3: %d\n",
            instr->nomeInstrucao, instr->dado1, instr->dado2, instr->dado3);
@@ -78,17 +83,25 @@ void decode(instrucaoFim *instr) {
 
 // Estágio 3: Execução da instrução
 int execute(instrucaoFim *instr) {
-    if (instr->nomeInstrucao[0] == 0 || !instr->Valido) return 0; // Verifica se a instrução é vazia ou inválida
+    if (instr->nomeInstrucao[0] == 0 || !instr->Valido) return 0; // Verifica se a instrução é válida
+
+    int result = 0; // Inicializa o resultado
 
     if (strcmp(instr->nomeInstrucao, "add") == 0) {
-        return instr->dado2 + instr->dado3; // Soma
+        result = instr->dado2 + instr->dado3; // Soma
     } else if (strcmp(instr->nomeInstrucao, "sub") == 0) {
-        return instr->dado2 - instr->dado3; // Subtração
+        result = instr->dado2 - instr->dado3; // Subtração
     } else if (strcmp(instr->nomeInstrucao, "beq") == 0) {
-        return (instr->dado1 == instr->dado2) ? 1 : 0; // Retorna 1 se igual
+        // Política "Não Tomada": apenas avança o PC se for falso
+        if (instr->dado1 == instr->dado2) {
+            // Se for verdadeira, retorna o novo PC (não implementado aqui)
+            printf("BEQ: condição verdadeira, novo PC não implementado.\n");
+            return 1; // Retorna um valor sinalizando que houve um desvio
+        }
     }
     
-    return 0; // Caso padrão
+    printf("Executando: %s, Resultado: %d\n", instr->nomeInstrucao, result);
+    return result; // Retorna o resultado da execução
 }
 
 // Estágio 4: Acesso à memória
@@ -96,78 +109,54 @@ int memory_access(instrucaoFim *instr) {
     if (!instr->Valido) return 0; // Verifica se a instrução é válida
 
     if (strcmp(instr->nomeInstrucao, "lw") == 0) {
-        return memory[instr->end3]; // Carrega valor da memória para o registrador
+        return memory[instr->end2 + instr->end3]; // Carrega da memória
     } else if (strcmp(instr->nomeInstrucao, "sw") == 0) {
-        memory[instr->end3] = instr->dado1; // Armazena valor do registrador na memória
+        memory[instr->end2 + instr->end3] = instr->dado1; // Armazena na memória
+        printf("SW: Armazenando R[%d] = %d no endereço %d\n", instr->end1, instr->dado1, instr->end2 + instr->end3);
         return -1; // Indica que foi uma operação de armazenamento
     }
-    return 0; // Nenhuma operação válida
+    return 0; // Retorna 0 se não for uma instrução válida
 }
 
 // Estágio 5: Escrita no banco de registradores
 void write_back(instrucaoFim *instr, int result) {
-    if (instr->nomeInstrucao[0] == 0 || !instr->Valido) return; // Verifica se a instrução é vazia ou inválida
+    if (instr->nomeInstrucao[0] == 0 || !instr->Valido) return; // Verifica se a instrução é válida
 
-    if (result != -1 && instr->end1 != 0) { // R0 é fixo em zero
-        R[instr->end1] = result; // Escreve o resultado no registrador
+    if (result != -1) {
+        R[instr->end1] = result; // Armazena o resultado no registrador de destino
         printf("Escrevendo R[%d] = %d\n", instr->end1, result);
     }
 }
 
-// Invalida a instrução seguinte se o desvio for incorreto
-void invalidate_next(instrucaoFim *instr, instrucaoFim *next_instr) {
-    if (strcmp(instr->nomeInstrucao, "beq") == 0 && instr->dado1 != instr->dado2) {
-        next_instr->Valido = false; // Invalida a próxima instrução se o desvio não for tomado
-        printf("Instrução inválida: %s\n", next_instr->nomeInstrucao);
-    }
-}
-
 int main() {
-    instrucaoFim pipes[4] = {0}; // Pipeline com 4 estágios
-    memory[10] = 100; // Inicializa memória
+    instrucaoFim pipes[4] = {0}; // Estruturas para armazenar instruções em cada estágio do pipeline
+    memory[10] = 100; // Inicializa a memória com alguns valores
     memory[11] = 254;
 
     reader(); // Lê as instruções do arquivo
 
-    int result = 0;
-    // Ciclo do pipeline, iterando enquanto houver instruções válidas ou ainda no pipeline
+    int result = 0; // Inicializa o resultado
+    // Ciclo do pipeline
     while (pc < numInt || pipes[3].nomeInstrucao[0] != 0 || pipes[2].nomeInstrucao[0] != 0 ||
            pipes[1].nomeInstrucao[0] != 0 || pipes[0].nomeInstrucao[0] != 0) {
-        
-        // Estágio 5: Escrita no banco de registradores
-        write_back(&pipes[3], result); 
 
-        // Estágio 4: Acesso à memória
-        result = memory_access(&pipes[2]); 
-        
-        // Estágio 3: Execução da instrução
-        result = execute(&pipes[1]);
-        
-        // Estágio 2: Decodificação da instrução
-        decode(&pipes[1]);
+        write_back(&pipes[3], result); // Estágio 5: WB
+        result = memory_access(&pipes[2]); // Estágio 4: MEM
+        result = execute(&pipes[2]); // Estágio 3: EX
+        decode(&pipes[1]); // Estágio 2: ID
+        pipes[0] = fetch(pc); // Estágio 1: IF
 
-        // Estágio 1: Busca da instrução
-        instrucaoFim current_instr = fetch(pc); // Busca a instrução atual
-
-        if (strcmp(current_instr.nomeInstrucao, "halt") == 0) {
-            break; // Para se encontrar a instrução halt
-        }
-
-        invalidate_next(&pipes[1], &current_instr); // Invalida a próxima instrução se necessário
-
-        // Atualiza o pipeline
-        pipes[3] = pipes[2]; // Mover instrução do estágio 4 para 5
-        pipes[2] = pipes[1]; // Mover instrução do estágio 3 para 4
-        pipes[1] = current_instr; // Atualiza o estágio 3 com a instrução atual
-        pipes[0] = fetch(pc); // Atualiza o estágio 1 com a nova instrução
-        pc++; // Incrementa o contador de programa
+        // Avança o pipeline
+        pipes[3] = pipes[2];
+        pipes[2] = pipes[1];
+        pipes[1] = pipes[0];
+        pc++; // Avança o contador de programa
     }
 
-    // Exibe o estado final dos registradores
-    printf("Estado final dos registradores:\n");
+    // Imprime o valor dos registradores
     for (int i = 0; i < NUM_REGS; i++) {
         printf("R[%d] = %d\n", i, R[i]);
     }
 
-    return 0;
+    return 0; // Finaliza o programa
 }

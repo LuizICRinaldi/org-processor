@@ -20,8 +20,9 @@ int R[NUM_REGS] = {0};
 instrucaoFim instrucoes[MAX_INSTRUCTIONS];
 int numInt = 0;
 int pc = 0;
-int memory[256] = {0};
+int memory[256] = {0}; // Memória de dados
 
+// Função para ler o arquivo com as instruções
 void reader() {
     char *filename = "programa.txt";
     FILE *fp = fopen(filename, "r");
@@ -54,6 +55,7 @@ void reader() {
     fclose(fp);
 }
 
+// Estágio 1: Busca da instrução
 instrucaoFim fetch(int pc) {
     if (pc < numInt) {
         return instrucoes[pc];
@@ -61,70 +63,116 @@ instrucaoFim fetch(int pc) {
     return (instrucaoFim){0};
 }
 
+// Estágio 2: Decodificação da instrução
 void decode(instrucaoFim *instr) {
     if(instr->nomeInstrucao[0] == 0) return;
     if(instr->Valido == false) return;
 
-    instr->dado1 = R[instr->end1];
-    instr->dado2 = R[instr->end2];
-    instr->dado3 = R[instr->end3];
+    // Se for 'lw', carrega apenas o registrador de destino (end1) e o endereço (end3)
+    if (strcmp(instr->nomeInstrucao, "lw") == 0) {
+        instr->dado1 = instr->end1;
+        instr->dado2 = 0; // Não tem dado2 e dado3 em 'lw'
+        instr->dado3 = instr->end3;
+    } else {
+        instr->dado1 = R[instr->end1];
+        instr->dado2 = R[instr->end2];
+        instr->dado3 = R[instr->end3];
+    }
+
+    printf("--------------------------------------------------\n");
+    printf("Decodificando: %-4s | Dado1: %-3d | Dado2: %-3d | Dado3: %-3d\n",
+           instr->nomeInstrucao, instr->dado1, instr->dado2, instr->dado3);
 }
 
+// Estágio 3: Execução da instrução
 int execute(instrucaoFim *instr) {
     if(instr->nomeInstrucao[0] == 0) return 0;
     if(instr->Valido == false) return 0;
 
+    int result = 0; // Inicializa a variável result
     if (strcmp(instr->nomeInstrucao, "add") == 0) {
-        return instr->dado2 + instr->dado3;
+        result = instr->dado2 + instr->dado3;
     } else if (strcmp(instr->nomeInstrucao, "sub") == 0) {
-        return instr->dado2 - instr->dado3;
+        result = instr->dado2 - instr->dado3;
     } else if (strcmp(instr->nomeInstrucao, "beq") == 0) {
-        return (instr->dado1 == instr->dado2) ? 1 : 0;
-    } else if (strcmp(instr->nomeInstrucao, "lw") == 0) {
-        return memory[instr->dado2 + instr->end3];
-    } else if (strcmp(instr->nomeInstrucao, "sw") == 0) {
-        memory[instr->end2 + instr->end3] = instr->dado1;
-        return -1;
+        if (instr->dado1 == instr->dado2) {
+            return instr->end3; // Retorna o novo endereço para o pc se a condição for verdadeira
+        }
+        return -1; // Retorna -1 se não for tomada
+    }
+
+    printf("Executando: %-4s | Resultado: %-4d\n", instr->nomeInstrucao, result);
+    return result;
+}
+
+void write_back(instrucaoFim *instr, int result) {
+    if (instr->nomeInstrucao[0] == 0) return;
+
+    if (strcmp(instr->nomeInstrucao, "lw") == 0) {
+        R[instr->end1] = result; // Carrega o valor no registrador de destino
+    } else if (strcmp(instr->nomeInstrucao, "add") == 0 || strcmp(instr->nomeInstrucao, "sub") == 0) {
+        R[instr->end1] = result; // Escreve o resultado da operação
+        printf("Escrevendo R[%d] = %d\n", instr->end1, result);
+    }
+}
+
+int memory_access(instrucaoFim *instr) {
+    if (strcmp(instr->nomeInstrucao, "lw") == 0) {
+        int endereco = instr->dado3; // Pega o endereço da memória
+        instr->dado1 = memory[endereco]; // Carrega o valor da memória no registrador de destino
+        printf("Escrevendo R[%d] = %d\n", instr->end1, instr->dado1);
+        return instr->dado1; // Retorna o valor lido da memória
     }
     return 0;
 }
 
-void write_back(instrucaoFim *instr, int result) {
-    if(instr->nomeInstrucao[0] == 0) return;
-    if(instr->Valido == false) return;
-
-    if (result != -1) {
-        R[instr->end1] = result;
-    }
-}
-
 int main() {
     instrucaoFim pipes[4] = {0};
-    memory[10] = 100;
+    memory[10] = 100; // Preencher a memória
     memory[11] = 254;
 
-    //Le arquivo do disco e salva em um array de instrucoes
+    // Ler o arquivo e salvar em um array de instruções
     reader();
 
-    int result = 0;
-    //Entra a cada ciclo de clock
-    //Fica iterando enquanto huver alguma instrucao valida, e pc for menor do que a quantidade de instrucoes
-    while(pc < numInt || pipes[3].nomeInstrucao[0] != 0 || pipes[2].nomeInstrucao[0] != 0 || 
-      pipes[1].nomeInstrucao[0] != 0 || pipes[0].nomeInstrucao[0] != 0) {
-        write_back(&pipes[3], result);
-        result = execute(&pipes[2]);
-        decode(&pipes[1]);
-        pipes[0] = fetch(pc);
+    int result = 0; // Resultado da execução
 
+    // Loop do pipeline, itera enquanto houver instruções válidas ou ainda no pipeline
+    while (pc < numInt || pipes[3].nomeInstrucao[0] != 0 || pipes[2].nomeInstrucao[0] != 0 ||
+           pipes[1].nomeInstrucao[0] != 0 || pipes[0].nomeInstrucao[0] != 0) {
+
+        // Estágio 5: Escrever de volta
+        write_back(&pipes[3], result);
+
+        // Estágio 4: Acesso à memória
+        if (pipes[2].nomeInstrucao[0] != 0 && strcmp(pipes[2].nomeInstrucao, "lw") == 0) {
+            result = memory_access(&pipes[2]); // Se for lw, pega o valor da memória
+        } else {
+            result = execute(&pipes[2]); // Estágio 3: Execução
+
+            // Se a instrução foi 'beq' e a branch foi tomada, atualize o pc
+            if (strcmp(pipes[2].nomeInstrucao, "beq") == 0 && result != -1) {
+                pc = result; // Atualiza o pc para o novo valor
+            }
+        }
+
+        // Estágio 2: Decodificação
+        decode(&pipes[1]);
+
+        // Estágio 1: Busca da instrução
+        pipes[0] = fetch(pc); // Buscar a próxima instrução
+
+        // Avançar o pipeline
         pipes[3] = pipes[2];
         pipes[2] = pipes[1];
         pipes[1] = pipes[0];
-        pc++;
+        pc++; // Incrementar o contador de programa
     }
 
-
+    // Imprime o valor dos registradores
+    printf("\nValores finais dos registradores:\n");
+    printf("--------------------------------------------------\n");
     for (int i = 0; i < NUM_REGS; i++) {
-        printf("R[%d] = %d\n", i, R[i]);
+        printf("R[%2d] = %d\n", i, R[i]);
     }
 
     return 0;

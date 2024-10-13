@@ -16,17 +16,25 @@ Este trabalho tem como objetivo simular o funcionamento básico de um processado
 Os 5 estágios do pipeline são:
 
 Busca de Instrução: Lê a instrução da memória.
+
 Decodificação: Interpreta a instrução e identifica quais dados são necessários.
+
 Execução: Faz as operações aritméticas (soma, subtração, etc).
+
 Acesso à Memória: Lê ou escreve dados na memória.
+
 Escrita de Resultados: Salva o resultado nos registradores.
 
 ## Simulador
 
 Lê o arquivo de instruções e carrega as instruções em assembly.
+
 Simula a execução das instruções dentro dos 5 estágios do pipeline.
+
 Tem um banco de registradores com 32 posições (R0 a R31), onde R0 sempre é 0.
+
 Suporta as seguintes instruções: ADD, SUB, BEQ, LW, SW, NOOP, HALT.
+
 Faz predição de desvio usando a política "não tomado" (o desvio não ocorre por padrão).
 
 ## Instruções para uso

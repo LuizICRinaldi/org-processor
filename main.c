@@ -17,7 +17,7 @@ typedef struct {
 
 // Variáveis globais
 char txtInstrucoes[MAX_INSTRUCTIONS][MAX_LENGTH]; // Instruções lidas do arquivo
-int R[NUM_REGS] = {0}; // Registradores
+int R[NUM_REGS] = {0}; // Registradores, R0 é fixo em zero
 instrucaoFim instrucoes[MAX_INSTRUCTIONS]; // Array de instruções
 int numInt = 0; // Número de instruções lidas
 int pc = 0; // Contador de programa
@@ -108,9 +108,17 @@ int memory_access(instrucaoFim *instr) {
 void write_back(instrucaoFim *instr, int result) {
     if (instr->nomeInstrucao[0] == 0 || !instr->Valido) return; // Verifica se a instrução é vazia ou inválida
 
-    if (result != -1) {
+    if (result != -1 && instr->end1 != 0) { // R0 é fixo em zero
         R[instr->end1] = result; // Escreve o resultado no registrador
         printf("Escrevendo R[%d] = %d\n", instr->end1, result);
+    }
+}
+
+// Invalida a instrução seguinte se o desvio for incorreto
+void invalidate_next(instrucaoFim *instr, instrucaoFim *next_instr) {
+    if (strcmp(instr->nomeInstrucao, "beq") == 0 && instr->dado1 != instr->dado2) {
+        next_instr->Valido = false; // Invalida a próxima instrução se o desvio não for tomado
+        printf("Instrução inválida: %s\n", next_instr->nomeInstrucao);
     }
 }
 
@@ -133,21 +141,30 @@ int main() {
         result = memory_access(&pipes[2]); 
         
         // Estágio 3: Execução da instrução
-        result = execute(&pipes[2]); 
+        result = execute(&pipes[1]);
         
         // Estágio 2: Decodificação da instrução
-        decode(&pipes[1]); 
-        
-        // Estágio 1: Busca da próxima instrução
-        pipes[0] = fetch(pc++); 
+        decode(&pipes[1]);
 
-        // Avança o pipeline
-        pipes[3] = pipes[2]; // Escreve
-        pipes[2] = pipes[1]; // Acesso à memória
-        pipes[1] = pipes[0]; // Decodifica
+        // Estágio 1: Busca da instrução
+        instrucaoFim current_instr = fetch(pc); // Busca a instrução atual
+
+        if (strcmp(current_instr.nomeInstrucao, "halt") == 0) {
+            break; // Para se encontrar a instrução halt
+        }
+
+        invalidate_next(&pipes[1], &current_instr); // Invalida a próxima instrução se necessário
+
+        // Atualiza o pipeline
+        pipes[3] = pipes[2]; // Mover instrução do estágio 4 para 5
+        pipes[2] = pipes[1]; // Mover instrução do estágio 3 para 4
+        pipes[1] = current_instr; // Atualiza o estágio 3 com a instrução atual
+        pipes[0] = fetch(pc); // Atualiza o estágio 1 com a nova instrução
+        pc++; // Incrementa o contador de programa
     }
 
-    // Imprime o valor dos registradores
+    // Exibe o estado final dos registradores
+    printf("Estado final dos registradores:\n");
     for (int i = 0; i < NUM_REGS; i++) {
         printf("R[%d] = %d\n", i, R[i]);
     }

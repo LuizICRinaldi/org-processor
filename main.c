@@ -76,15 +76,9 @@ void decode(instrucaoFim *instr) {
     if (!instr->Valido) return; // Verifica se a instrução é válida
 
     // Carrega dados dos registradores conforme necessário
-    if (strcmp(instr->nomeInstrucao, "lw") == 0 || strcmp(instr->nomeInstrucao, "sw") == 0) {
-        instr->dado1 = instr->end1; // Para lw, end1 é o registrador de destino
-        instr->dado2 = temp.registradores[instr->end1]; // Para sw, carrega o valor do registrador
-        instr->dado3 = instr->end3; // Endereço de memória
-    } else {
-        instr->dado1 = temp.registradores[instr->end1]; // Carrega dados do registrador
-        instr->dado2 = temp.registradores[instr->end2]; // Carrega dados do segundo registrador
-        instr->dado3 = instr->end3; // Carrega o endereço (se aplicável)
-    }
+    instr->dado1 = temp.registradores[instr->end1]; // Carrega dados do primeiro registrador
+    instr->dado2 = temp.registradores[instr->end2]; // Carrega dados do segundo registrador
+    instr->dado3 = instr->end3; // Carrega o endereço (se aplicável)
 
     // Exibe informações sobre a instrução sendo decodificada
     printf("--------------------------------------------------\n");
@@ -92,45 +86,32 @@ void decode(instrucaoFim *instr) {
            instr->nomeInstrucao, instr->dado1, instr->dado2, instr->dado3);
 }
 
-// Funções específicas para execução de cada tipo de instrução
-int execute_add(instrucaoFim *instr) {
-    return instr->dado2 + instr->dado3; // Soma os dados dos registradores
-}
-
-int execute_sub(instrucaoFim *instr) {
-    return instr->dado2 - instr->dado3; // Subtrai os dados dos registradores
-}
-
-int execute_beq(instrucaoFim *instr) {
-    return (instr->dado1 == instr->dado2) ? instr->end3 : -1; // Retorna o novo PC se a condição for verdadeira
-}
-
-// Executa a instrução 'lw' (Load Word)
-void execute_lw(instrucaoFim *instr) {
-    temp.registradores[instr->end1] = temp.memoria[instr->end3]; // Carrega valor da memória para o registrador
-    printf("LW: Carregando R[%d] = %d do endereço %d\n", instr->end1, temp.registradores[instr->end1], instr->end3);
-}
-
-// Executa a instrução 'sw' (Store Word)
-void execute_sw(instrucaoFim *instr) {
-    temp.memoria[instr->end3] = instr->dado2; // Armazena o valor do registrador na memória
-    printf("SW: Armazenando R[%d] = %d no endereço %d\n", instr->end1, instr->dado2, instr->end3);
-}
-
 // Estágio 3: Execução da instrução
 void execute(instrucaoFim *instr) {
     if (instr->nomeInstrucao[0] == 0) return; // Verifica se a instrução é vazia
 
+    // Executa as instruções conforme seu tipo
     if (strcmp(instr->nomeInstrucao, "add") == 0) {
-        int result = execute_add(instr);
-        temp.registradores[instr->end1] = result; // Armazena o resultado no registrador de destino
+        temp.registradores[instr->end1] = instr->dado2 + instr->dado3; // Soma os dados dos registradores
+        printf("ADD: R[%d] = %d + %d\n", instr->end1, instr->dado2, instr->dado3);
     } else if (strcmp(instr->nomeInstrucao, "sub") == 0) {
-        int result = execute_sub(instr);
-        temp.registradores[instr->end1] = result; // Armazena o resultado no registrador de destino
+        temp.registradores[instr->end1] = instr->dado2 - instr->dado3; // Subtrai os dados dos registradores
+        printf("SUB: R[%d] = %d - %d\n", instr->end1, instr->dado2, instr->dado3);
     } else if (strcmp(instr->nomeInstrucao, "lw") == 0) {
-        execute_lw(instr); // Executa a instrução de Load Word
+        temp.registradores[instr->end1] = temp.memoria[instr->end3]; // Carrega valor da memória para o registrador
+        printf("LW: Carregando R[%d] = %d do endereço %d\n", instr->end1, temp.registradores[instr->end1], instr->end3);
     } else if (strcmp(instr->nomeInstrucao, "sw") == 0) {
-        execute_sw(instr); // Executa a instrução de Store Word
+        temp.memoria[instr->end3] = instr->dado2; // Armazena o valor do registrador na memória
+        printf("SW: Armazenando R[%d] = %d no endereço %d\n", instr->end1, instr->dado2, instr->end3);
+    } else if (strcmp(instr->nomeInstrucao, "beq") == 0) {
+        // Lida com a instrução de desvio condicional
+        if (instr->dado1 == instr->dado2) {
+            pc = instr->end3; // Atualiza o contador de programa se a condição for verdadeira
+            printf("BEQ: Desvio para o endereço %d\n", pc);
+        } else {
+            printf("BEQ: Condição falsa, próximo PC = %d\n", pc + 1);
+            pc++; // Incrementa o PC se a condição for falsa
+        }
     }
 }
 

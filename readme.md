@@ -57,7 +57,20 @@ Exemplo: lw 1 0 10 (carrega o valor da memória no endereço base R0 + 10 para o
 Para compilar o código e rodar o simulador, basta usar os seguintes comandos no terminal:
 
 gcc -o simulador main.c -I.
-./simulador
+./simulador "segunda_entrega.txt" 0
+
+**OU**
+
+mingw32-make
+.\mips.exe "segunda_entrega.txt" 0
+
+**OU**
+
+make
+.\mips.exe "segunda_entrega.txt" 0
+
+### OBS:
+Note que os parametros de nome do programa e se predicao sera ativa ou nao podem ser alterados livremente.
 
 ## O que o compilador faz
 Depois de executar o programa, ele vai mostrar os valores finais de todos os registradores. O objetivo principal é verificar como o pipeline funciona e comparar o desempenho com e sem predição de desvio.

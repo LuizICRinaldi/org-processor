@@ -1,2 +1,2 @@
-prog: main.c
-	gcc -o prog main.c -I.
+mips: main.c
+	gcc -o mips main.c -I.

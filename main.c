@@ -20,11 +20,16 @@ typedef struct {
 // Armazenamento das instrucoes lidas do arquivo
 char txtInstrucoes[MAX_INSTRUCTIONS][255];
 
+// Tabela de predicao de desvio
+bool tabelaPredicao[16] = {false};
+bool predicaoAtivada;
+
 // Banco de registradores (R0 a R31)
 int R[NUM_REGS] = {0};
 instrucaoFim instrucoes[MAX_INSTRUCTIONS]; // Vetor para armazenar instrucoes
 int numInt = 0; // Contador de instrucoes
 int pc = 0; // Contador de programa
+int fetchNextExcpectedPc;
 int memory[256] = {0}; // Memoria de dados
 
 char *instList[] = {"noop",
@@ -45,12 +50,12 @@ bool isValid;
 instrucaoFim *pipes[5] = {NULL};
 
 // Funcao para ler o arquivo com as instrucoes
-void reader(char *filename) {
+bool reader(char *filename) {
     FILE *fp = fopen(filename, "r"); // Abre o arquivo
 
     if (fp == NULL) {
-        printf("Error: could not open file %s\n", filename); // Mensagem de erro ao abrir o arquivo
-        return;
+        printf("Erro: falha ao abrir o arquivo %s\n", filename); // Mensagem de erro ao abrir o arquivo
+        return false;
     }
 
     // Leitura das instrucoes do arquivo
@@ -76,13 +81,27 @@ void reader(char *filename) {
     }
 
     fclose(fp); // Fecha o arquivo
+    return true;
 }
 
 // Estagio 1: Busca da instrucao
 instrucaoFim *fetch(int pc) {
     int instPos = pc;
+    fetchNextExcpectedPc = pc + 1;
+
     if (instPos < numInt) {
-        return &instrucoes[instPos]; // Retorna a instrucao no endereco atual do PC
+        instrucaoFim *instr = &instrucoes[instPos];
+        if(predicaoAtivada) {
+            if(strcmp(instr->nomeInstrucao, "beq") == 0) {
+                if(tabelaPredicao[(instr->posicao>>2)&0xf]) {
+                    fetchNextExcpectedPc = instr->end3;
+                    printf("%d = Tomou desvio no beq para endereco %d no fetch.\n", clockCycle, fetchNextExcpectedPc);
+                    fetchNextExcpectedPc /= 4;
+                }
+            }
+        }
+
+        return instr; // Retorna a instrucao no endereco atual do PC
     }
     return NULL; // Retorna instrucao vazia se o PC estiver fora do alcance
 }
@@ -137,7 +156,7 @@ void execute() {
 // Estagio 4: Acesso a memoria
 void memory_access() {
     instrucaoFim *instr = pipes[3];
-    int expectedPC = pc + 1;
+    int expectedPC = fetchNextExcpectedPc;
 
     // Verifica se a instrucao e valida
     if(instr == NULL || instr->Valido == false) {
@@ -153,10 +172,31 @@ void memory_access() {
         memData =  memory[ulaResult];
         printf("%d - Escreveu %d no endereco %d\n", clockCycle, memData, ulaResult);
     } else if(strcmp(instr->nomeInstrucao, "beq") == 0) {
-        if(ulaResult) {
+        bool validadeDesvio = (ulaResult != 0);
+        int corrigeDesvioIncorreto = instr->end3;
+
+        //Tratamento para predicao estar ativa
+        if(predicaoAtivada) {
+            //Desvio tomado foi correto
+            if(tabelaPredicao[(instr->posicao>>2)&0xf] == validadeDesvio) {
+                validadeDesvio = false;
+            } else {
+                printf("%d - Tabela de predicao errou, corrigindo para %d no endereco %d.\n", clockCycle, ulaResult, (instr->posicao>>2)&0xf);
+                //Cancela tomada de desvio caso a tomada estava prevista na tabela
+                if(tabelaPredicao[(instr->posicao>>2)&0xf]) {
+                    corrigeDesvioIncorreto = instr->posicao + 4;
+                } 
+                //Atualiza tabela de desvio com o ultimo resultado
+                tabelaPredicao[(instr->posicao>>2)&0xf] = validadeDesvio;
+                validadeDesvio = true;
+            }
+            
+        }
+
+        if(validadeDesvio) {
             isValid = false;
             //Faz o pulo para a instrucao  
-            expectedPC = instr->end3;
+            expectedPC = corrigeDesvioIncorreto;
             printf("%d - Desvio incorreto, pulando para instrucao %d.\n", clockCycle, expectedPC);
             expectedPC /= 4;
             invalidJumps++;
@@ -182,20 +222,40 @@ void write_back() {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+
+    if(argc != 3) {
+        printf("Por favor, insira os parametros corretamente:\n");
+        printf("mips \"nome_arquivo\" [Predicao ativa: 0 = off, 1 = on] \n");
+        return -1;
+    }
+
+    char *filename = argv[1];
+
+    int checkPredicao = argv[2][0] - '0';
+    if(checkPredicao < 0 || checkPredicao > 1) {
+        printf("Parametro de predicao ativa invalido, programa nao sera executado.\n");
+        return -1;
+    }
+
+    predicaoAtivada = (checkPredicao > 0);
+
     //Inicia valores da memoria
     memory[10] = 100;
     memory[11] = 254;
-
     memory[5] = -1;
     memory[6] = 10;
     memory[7] = 1;
 
     //Le arquivo do disco e salva em um array de instrucoes
-    reader("segunda_entrega.txt");
+    if(reader(filename) == false) {
+        printf("Programa nao pode ser executado por nao conseguir abrir arquivo.\n");
+        return -1;
+    }
 
     // Realiza o fetch na primeira instrucao
     pc = -1;
+    fetchNextExcpectedPc = pc + 1;
     clockCycle = 0;
     invalidJumps = 0;
 

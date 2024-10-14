@@ -38,6 +38,7 @@ char *instList[] = {"noop",
 
 int memData = 0, ulaResult = 0;
 int clockCycle = 0;
+int invalidJumps = 0;
 bool isValid;
 
 // Estruturas para armazenar instrucoes em cada estagio do pipeline
@@ -158,6 +159,7 @@ void memory_access() {
             expectedPC = instr->end3;
             printf("%d - Desvio incorreto, pulando para instrucao %d.\n", clockCycle, expectedPC);
             expectedPC /= 4;
+            invalidJumps++;
         } else {
             printf("%d - Desvio foi tomado corretamente, programa segue.\n", clockCycle);
         }
@@ -190,11 +192,12 @@ int main() {
     memory[7] = 1;
 
     //Le arquivo do disco e salva em um array de instrucoes
-    reader("primeira_entrega.txt");
+    reader("segunda_entrega.txt");
 
     // Realiza o fetch na primeira instrucao
     pc = -1;
     clockCycle = 0;
+    invalidJumps = 0;
 
     //Entra a cada ciclo de clock
     //Fica iterando enquanto huver alguma instrucao valida, e pc for menor do que a quantidade de instrucoes
@@ -220,7 +223,7 @@ int main() {
         clockCycle++;
     }
 
-    printf("Fim da execucao do programa, com %d ciclos de clock.\n\n", clockCycle);
+    printf("Fim da execucao do programa, com %d ciclos de clock, e %d desvios incorretos.\n\n", clockCycle, invalidJumps);
 	// Imprime o valor dos registradores
     for (int i = 0; i < NUM_REGS; i++) {
         printf("R[%d] = %d\n", i, R[i]);

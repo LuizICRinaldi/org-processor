@@ -126,7 +126,10 @@ void decode() {
 // Estagio 3: Execucao da instrucao
 void execute() {
     instrucaoFim *instr = pipes[2];
+    int expectedPC = fetchNextExcpectedPc;
+
     if (instr == NULL || !instr->Valido) {
+        pc = expectedPC;
         return; // Verifica se a instrucao e valida
     } 
 
@@ -146,33 +149,8 @@ void execute() {
     } else if (strcmp(instr->nomeInstrucao, "beq") == 0) {
         // Caso em que houve o desvio (faz o pulo e invalida outras instrucoes)
         result = (instr->dado1 == instr->dado2) ? 1 : 0;
-        instr->targetRegister = -1;
-    } 
 
-	printf("%d - Executando: %s, Resultado: %d\n", clockCycle, instr->nomeInstrucao, result);
-    ulaResult = result; // Salva o resultado da execucao
-}
-
-// Estagio 4: Acesso a memoria
-void memory_access() {
-    instrucaoFim *instr = pipes[3];
-    int expectedPC = fetchNextExcpectedPc;
-
-    // Verifica se a instrucao e valida
-    if(instr == NULL || instr->Valido == false) {
-        pc = expectedPC;
-        return; 
-    }
-
-    if (strcmp(instr->nomeInstrucao, "lw") == 0) {
-        memData =  memory[ulaResult];
-        printf("%d - Leu %d do endereco %d\n", clockCycle, memData, ulaResult);
-    } else if (strcmp(instr->nomeInstrucao, "sw") == 0) {
-        memory[ulaResult] = instr->dado2;
-        memData =  memory[ulaResult];
-        printf("%d - Escreveu %d no endereco %d\n", clockCycle, memData, ulaResult);
-    } else if(strcmp(instr->nomeInstrucao, "beq") == 0) {
-        bool validadeDesvio = (ulaResult != 0);
+        bool validadeDesvio = (result != 0);
         int corrigeDesvioIncorreto = instr->end3;
 
         //Tratamento para predicao estar ativa
@@ -181,7 +159,7 @@ void memory_access() {
             if(tabelaPredicao[(instr->posicao>>2)&0xf] == validadeDesvio) {
                 validadeDesvio = false;
             } else {
-                printf("%d - Tabela de predicao errou, corrigindo para %d no endereco %d.\n", clockCycle, ulaResult, (instr->posicao>>2)&0xf);
+                printf("%d - Tabela de predicao errou, corrigindo para %d no endereco %d.\n", clockCycle, result, (instr->posicao>>2)&0xf);
                 //Cancela tomada de desvio caso a tomada estava prevista na tabela
                 if(tabelaPredicao[(instr->posicao>>2)&0xf]) {
                     corrigeDesvioIncorreto = instr->posicao + 4;
@@ -203,11 +181,36 @@ void memory_access() {
         } else {
             printf("%d - Desvio foi tomado corretamente, programa segue.\n", clockCycle);
         }
+
+        instr->targetRegister = -1;
+    } 
+
+	printf("%d - Executando: %s, Resultado: %d\n", clockCycle, instr->nomeInstrucao, result);
+    ulaResult = result; // Salva o resultado da execucao
+
+    pc = expectedPC;
+}
+
+// Estagio 4: Acesso a memoria
+void memory_access() {
+    instrucaoFim *instr = pipes[3];
+
+    // Verifica se a instrucao e valida
+    if(instr == NULL || instr->Valido == false) {
+        return; 
+    }
+
+    if (strcmp(instr->nomeInstrucao, "lw") == 0) {
+        memData =  memory[ulaResult];
+        printf("%d - Leu %d do endereco %d\n", clockCycle, memData, ulaResult);
+    } else if (strcmp(instr->nomeInstrucao, "sw") == 0) {
+        memory[ulaResult] = instr->dado2;
+        memData =  memory[ulaResult];
+        printf("%d - Escreveu %d no endereco %d\n", clockCycle, memData, ulaResult);
     } else {
         memData = ulaResult;
         printf("%d - Passou %d direto sem acesso a memoria\n", clockCycle, memData);
     }
-    pc = expectedPC;
 }
 
 // Estagio 5: Escrita no banco de registradores

@@ -37,10 +37,14 @@ char *instList[] = {"noop",
 };
 
 int memData = 0, ulaResult = 0;
+int clockCycle = 0;
+bool isValid;
+
+// Estruturas para armazenar instrucoes em cada estagio do pipeline
+instrucaoFim *pipes[5] = {NULL};
 
 // Funcao para ler o arquivo com as instrucoes
-void reader() {
-    char *filename = "programa.txt"; // Nome do arquivo contendo as instrucoes
+void reader(char *filename) {
     FILE *fp = fopen(filename, "r"); // Abre o arquivo
 
     if (fp == NULL) {
@@ -51,7 +55,7 @@ void reader() {
     // Leitura das instrucoes do arquivo
     while (fgets(txtInstrucoes[numInt], MAX_LENGTH, fp) && numInt < MAX_INSTRUCTIONS) {
         // Tratamento de instrucoes "noop" e "halt"
-        if (strncmp(txtInstrucoes[numInt], "noop", 4) == 0 || strncmp(txtInstrucoes[numInt], "halt", 4) == 0) {
+        if (strstr(txtInstrucoes[numInt], "noop") != NULL || strstr(txtInstrucoes[numInt], "halt") != NULL) {
             sscanf(txtInstrucoes[numInt], "%s", instrucoes[numInt].nomeInstrucao);
             instrucoes[numInt].end1 = 0;
             instrucoes[numInt].end2 = 0;
@@ -75,28 +79,39 @@ void reader() {
 
 // Estagio 1: Busca da instrucao
 instrucaoFim *fetch(int pc) {
-    if (pc < numInt) {
-        return &instrucoes[pc]; // Retorna a instrucao no endereco atual do PC
+    int instPos = pc;
+    if (instPos < numInt) {
+        return &instrucoes[instPos]; // Retorna a instrucao no endereco atual do PC
     }
     return NULL; // Retorna instrucao vazia se o PC estiver fora do alcance
 }
 
 // Estagio 2: Decodificacao da instrucao
-void decode(instrucaoFim *instr) {
+void decode() {
+    instrucaoFim *instr = pipes[1];
     if(instr == NULL || !instr->Valido) return; // Verifica se a instrucao e valida
+
+    instr->Valido = isValid;
+    if(!instr->Valido) return;
 
     // Le os dados dos registradores
     instr->dado1 = R[instr->end1];
     instr->dado2 = R[instr->end2];
     instr->dado3 = R[instr->end3];
 
-    printf("Decodificando: %s, Dado1: %d, Dado2: %d, Dado3: %d\n",
+    printf("%d - Decodificando: %s, Dado1: %d, Dado2: %d, Dado3: %d\n", clockCycle,
            instr->nomeInstrucao, instr->dado1, instr->dado2, instr->dado3);
 }
 
 // Estagio 3: Execucao da instrucao
-void execute(instrucaoFim *instr) {
-    if (instr == NULL || !instr->Valido) return; // Verifica se a instrucao e valida
+void execute() {
+    instrucaoFim *instr = pipes[2];
+    if (instr == NULL || !instr->Valido) {
+        return; // Verifica se a instrucao e valida
+    } 
+
+    instr->Valido = isValid;
+    if(!instr->Valido) return;
 
     int result = 0; // Inicializa o resultado
 
@@ -109,59 +124,90 @@ void execute(instrucaoFim *instr) {
         result = instr->dado1 + instr->end3;
         instr->targetRegister = instr->end2;
     } else if (strcmp(instr->nomeInstrucao, "beq") == 0) {
-        result =  (instr->dado1 == instr->dado2) ? 1 : 0;
+        // Caso em que houve o desvio (faz o pulo e invalida outras instrucoes)
+        result = (instr->dado1 == instr->dado2) ? 1 : 0;
+        instr->targetRegister = -1;
     } 
-    
-	printf("Executando: %s, Resultado: %d\n", instr->nomeInstrucao, result);
+
+	printf("%d - Executando: %s, Resultado: %d\n", clockCycle, instr->nomeInstrucao, result);
     ulaResult = result; // Salva o resultado da execucao
 }
 
 // Estagio 4: Acesso a memoria
-void memory_access(instrucaoFim *instr) {
-    if(instr == NULL || instr->Valido == false) return; // Verifica se a instrucao e valida
+void memory_access() {
+    instrucaoFim *instr = pipes[3];
+    int expectedPC = pc + 1;
+
+    // Verifica se a instrucao e valida
+    if(instr == NULL || instr->Valido == false) {
+        pc = expectedPC;
+        return; 
+    }
 
     if (strcmp(instr->nomeInstrucao, "lw") == 0) {
         memData =  memory[ulaResult];
+        printf("%d - Leu %d do endereco %d\n", clockCycle, memData, ulaResult);
     } else if (strcmp(instr->nomeInstrucao, "sw") == 0) {
         memory[ulaResult] = instr->dado2;
         memData =  memory[ulaResult];
+        printf("%d - Escreveu %d no endereco %d\n", clockCycle, memData, ulaResult);
+    } else if(strcmp(instr->nomeInstrucao, "beq") == 0) {
+        if(ulaResult) {
+            isValid = false;
+            //Faz o pulo para a instrucao  
+            expectedPC = instr->end3;
+            printf("%d - Desvio incorreto, pulando para instrucao %d.\n", clockCycle, expectedPC);
+            expectedPC /= 4;
+        } else {
+            printf("%d - Desvio foi tomado corretamente, programa segue.\n", clockCycle);
+        }
     } else {
         memData = ulaResult;
+        printf("%d - Passou %d direto sem acesso a memoria\n", clockCycle, memData);
     }
-
-    
+    pc = expectedPC;
 }
 
 // Estagio 5: Escrita no banco de registradores
-void write_back(instrucaoFim *instr) {
+void write_back() {
+    instrucaoFim *instr = pipes[4];
     if(instr == NULL) return;
     if(instr->Valido == false) return;
 
-    R[instr->targetRegister] = memData;
-    printf("Escrevendo R[%d] = %d\n", instr->targetRegister, memData);
+    if(instr->targetRegister >= 0) {
+        R[instr->targetRegister] = memData;
+        printf("%d - Escrevendo R[%d] = %d\n", clockCycle, instr->targetRegister, memData);
+    }
 }
 
 int main() {
-	// Estruturas para armazenar instrucoes em cada estagio do pipeline
-    instrucaoFim *pipes[5] = {NULL};
-
     //Inicia valores da memoria
     memory[10] = 100;
     memory[11] = 254;
 
+    memory[5] = -1;
+    memory[6] = 10;
+    memory[7] = 1;
+
     //Le arquivo do disco e salva em um array de instrucoes
-    reader();
+    reader("primeira_entrega.txt");
+
+    // Realiza o fetch na primeira instrucao
+    pc = -1;
+    clockCycle = 0;
 
     //Entra a cada ciclo de clock
     //Fica iterando enquanto huver alguma instrucao valida, e pc for menor do que a quantidade de instrucoes
     while(pc < numInt || pipes[4] != NULL || pipes[3] != NULL || 
       pipes[2] != NULL || pipes[1] != NULL || pipes[0] != NULL) {
 
+        isValid = true;
+
         // Estagios de pipeline
-        write_back(pipes[4]); // Estagio 5: WB
-        memory_access(pipes[3]); // Estagio 4: MEM
-        execute(pipes[2]); // Estagio 3: EX
-        decode(pipes[1]); // Estagio 2: ID
+        write_back(); // Estagio 5: WB
+        memory_access(); // Estagio 4: MEM
+        execute(); // Estagio 3: EX
+        decode(); // Estagio 2: ID
         pipes[0] = fetch(pc); // Estagio 1: IF
 
 		// Avanca o pipeline
@@ -169,9 +215,12 @@ int main() {
         pipes[3] = pipes[2];
         pipes[2] = pipes[1];
         pipes[1] = pipes[0];
-        pc++;
+
+        printf("Fim do ciclo de clock %d, indo para o proximo...\n\n", clockCycle);
+        clockCycle++;
     }
 
+    printf("Fim da execucao do programa, com %d ciclos de clock.\n\n", clockCycle);
 	// Imprime o valor dos registradores
     for (int i = 0; i < NUM_REGS; i++) {
         printf("R[%d] = %d\n", i, R[i]);

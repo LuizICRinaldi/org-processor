@@ -15,6 +15,7 @@ typedef struct {
     int posicao;
     int targetRegister;
     bool Valido; // Indica se a instrucao e valida
+    bool origValido;
 } instrucaoFim;
 
 // Armazenamento das instrucoes lidas do arquivo
@@ -30,6 +31,7 @@ instrucaoFim instrucoes[MAX_INSTRUCTIONS]; // Vetor para armazenar instrucoes
 int numInt = 0; // Contador de instrucoes
 int pc = 0; // Contador de programa
 int fetchNextExcpectedPc;
+int ignoredInstructions = 0;
 int memory[256] = {0}; // Memoria de dados
 
 char *instList[] = {"noop",
@@ -66,8 +68,7 @@ bool reader(char *filename) {
             instrucoes[numInt].end1 = 0;
             instrucoes[numInt].end2 = 0;
             instrucoes[numInt].end3 = 0;
-            instrucoes[numInt].Valido = false;
-            numInt++;
+            instrucoes[numInt].Valido = true;
         } else {
             sscanf(txtInstrucoes[numInt], "%d %s %d %d %d",
                    &instrucoes[numInt].posicao,
@@ -76,8 +77,9 @@ bool reader(char *filename) {
                    &instrucoes[numInt].end2,
                    &instrucoes[numInt].end3);
             instrucoes[numInt].Valido = true; // Marcar como valida
-            numInt++;
         }
+        instrucoes[numInt].origValido = instrucoes[numInt].Valido;
+        numInt++;
     }
 
     fclose(fp); // Fecha o arquivo
@@ -86,11 +88,13 @@ bool reader(char *filename) {
 
 // Estagio 1: Busca da instrucao
 instrucaoFim *fetch(int pc) {
+    if(!isValid) ignoredInstructions++;
     int instPos = pc;
     fetchNextExcpectedPc = pc + 1;
 
     if (instPos < numInt) {
         instrucaoFim *instr = &instrucoes[instPos];
+
         if(predicaoAtivada) {
             if(strcmp(instr->nomeInstrucao, "beq") == 0) {
                 if(tabelaPredicao[(instr->posicao>>2)&0xf]) {
@@ -108,6 +112,7 @@ instrucaoFim *fetch(int pc) {
 
 // Estagio 2: Decodificacao da instrucao
 void decode() {
+    if(!isValid) ignoredInstructions++;
     instrucaoFim *instr = pipes[1];
     if(instr == NULL || !instr->Valido) return; // Verifica se a instrucao e valida
 
@@ -261,6 +266,7 @@ int main(int argc, char *argv[]) {
     fetchNextExcpectedPc = pc + 1;
     clockCycle = 0;
     invalidJumps = 0;
+    ignoredInstructions = 0;
 
     //Entra a cada ciclo de clock
     //Fica iterando enquanto huver alguma instrucao valida, e pc for menor do que a quantidade de instrucoes
@@ -286,7 +292,7 @@ int main(int argc, char *argv[]) {
         clockCycle++;
     }
 
-    printf("Fim da execucao do programa, com %d ciclos de clock, e %d desvios incorretos.\n\n", clockCycle, invalidJumps);
+    printf("Fim da execucao do programa, com %d ciclos de clock, %d desvios incorretos e %d instrucoes ignoradas.\n\n", clockCycle, invalidJumps, ignoredInstructions);
 	// Imprime o valor dos registradores
     for (int i = 0; i < NUM_REGS; i++) {
         printf("R[%d] = %d\n", i, R[i]);
